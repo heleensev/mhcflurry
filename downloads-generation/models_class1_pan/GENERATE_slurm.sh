@@ -91,7 +91,6 @@ do
     mhcflurry-class1-train-pan-allele-models \
         --data "$TRAINING_DATA" \
         --allele-sequences "$ALLELE_SEQUENCES" \
-        --pretrain-data "$(mhcflurry-downloads path random_peptide_predictions)/predictions.csv.bz2" \
         --held-out-measurements-per-allele-fraction-and-max 0.25 100 \
         --num-folds 4 \
         --hyperparameters "$HYPERPARAMETERS" \
