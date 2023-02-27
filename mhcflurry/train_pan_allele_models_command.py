@@ -127,12 +127,23 @@ parser.add_argument(
     default=False,
     help="Do not actually train models. The initialized run can be continued "
     "later with --continue-incomplete.")
+parser.add_argument(
+    "--logo",
+    action="store_true",
+    default=False,
+    help="Argument to perform leave-one-group-out experiment using the column provided in cluster_column."
+)
+parser.add_argument(
+    "--logo-column",
+    default="cluster_set_10",
+    help="Name of the column to use for generating groups. Default: cluster_set_10",
+)
 
 add_local_parallelism_args(parser)
 add_cluster_parallelism_args(parser)
 
 
-def assign_folds(df, num_folds, held_out_fraction, held_out_max):
+def assign_folds(df, num_folds, held_out_fraction, held_out_max, cluster_column, logo=False):
     """
     Split training data into multple test/train pairs, which we refer to as
     folds. Note that a given data point may be assigned to multiple test or
@@ -164,41 +175,51 @@ def assign_folds(df, num_folds, held_out_fraction, held_out_max):
     """
     result_df = pandas.DataFrame(index=df.index)
 
-    for fold in range(num_folds):
-        result_df["fold_%d" % fold] = True
-        for (allele, sub_df) in df.groupby("allele"):
-            medians = sub_df.groupby("peptide").measurement_value.median()
+    if logo == False:
+        for fold in range(num_folds):
+            result_df["fold_%d" % fold] = True
+            for (allele, sub_df) in df.groupby("allele"):
+                medians = sub_df.groupby("peptide").measurement_value.median()
 
-            low_peptides = medians[medians < medians.median()].index.values
-            high_peptides = medians[medians >= medians.median()].index.values
+                low_peptides = medians[medians < medians.median()].index.values
+                high_peptides = medians[medians >= medians.median()].index.values
 
-            held_out_count = int(
-                min(len(medians) * held_out_fraction, held_out_max))
+                held_out_count = int(
+                    min(len(medians) * held_out_fraction, held_out_max))
 
-            held_out_peptides = set()
-            if held_out_count == 0:
-                pass
-            elif held_out_count < 2:
-                held_out_peptides = set(
-                    medians.index.to_series().sample(n=held_out_count))
-            else:
-                held_out_low_count = min(
-                    len(low_peptides),
-                    int(held_out_count / 2))
-                held_out_high_count = min(
-                    len(high_peptides),
-                    held_out_count - held_out_low_count)
+                held_out_peptides = set()
+                if held_out_count == 0:
+                    pass
+                elif held_out_count < 2:
+                    held_out_peptides = set(
+                        medians.index.to_series().sample(n=held_out_count))
+                else:
+                    held_out_low_count = min(
+                        len(low_peptides),
+                        int(held_out_count / 2))
+                    held_out_high_count = min(
+                        len(high_peptides),
+                        held_out_count - held_out_low_count)
 
-                held_out_low = pandas.Series(low_peptides).sample(
-                    n=held_out_low_count) if held_out_low_count else set()
-                held_out_high = pandas.Series(high_peptides).sample(
-                    n=held_out_high_count) if held_out_high_count else set()
-                held_out_peptides = set(held_out_low).union(set(held_out_high))
+                    held_out_low = pandas.Series(low_peptides).sample(
+                        n=held_out_low_count) if held_out_low_count else set()
+                    held_out_high = pandas.Series(high_peptides).sample(
+                        n=held_out_high_count) if held_out_high_count else set()
+                    held_out_peptides = set(held_out_low).union(set(held_out_high))
 
-            result_df.loc[
-                sub_df.index[sub_df.peptide.isin(held_out_peptides)],
-                "fold_%d" % fold
-            ] = False
+                result_df.loc[
+                    sub_df.index[sub_df.peptide.isin(held_out_peptides)],
+                    "fold_%d" % fold
+                ] = False
+    else:
+        df[cluster_column] = df[cluster_column] + 1
+        df[cluster_column] = df[cluster_column].fillna(0)
+        groups = df[cluster_column]
+        for g in groups:
+            g = int(g)
+            result_df["fold_%d" % g] = True
+            cluster_indices = df.index[df[cluster_column] == g]
+            result_df.loc[cluster_indices, "fold_%d" % g] = False
 
     print("Training points per fold")
     print(result_df.sum())
@@ -340,7 +361,10 @@ def initialize_training(args):
         df=df,
         num_folds=args.num_folds,
         held_out_fraction=held_out_fraction,
-        held_out_max=held_out_max)
+        held_out_max=held_out_max,
+        logo=args.logo,
+        cluster_column=args.logo_column
+    )
 
     allele_sequences_in_use = allele_sequences[
         allele_sequences.index.isin(df.allele)
@@ -387,20 +411,37 @@ def initialize_training(args):
             if not args.pretrain_data:
                 raise ValueError("--pretrain-data is required")
 
-        for fold in range(args.num_folds):
-            for replicate in range(args.num_replicates):
-                work_dict = {
-                    'work_item_name': str(uuid.uuid4()),
-                    'architecture_num': h,
-                    'num_architectures': len(hyperparameters_lst),
-                    'fold_num': fold,
-                    'num_folds': args.num_folds,
-                    'replicate_num': replicate,
-                    'num_replicates': args.num_replicates,
-                    'hyperparameters': hyperparameters,
-                    'pretrain_data_filename': args.pretrain_data,
-                }
-                work_items.append(work_dict)
+        if args.logo == False:
+            for fold in range(args.num_folds):
+                for replicate in range(args.num_replicates):
+                    work_dict = {
+                        'work_item_name': str(uuid.uuid4()),
+                        'architecture_num': h,
+                        'num_architectures': len(hyperparameters_lst),
+                        'fold_num': fold,
+                        'num_folds': args.num_folds,
+                        'replicate_num': replicate,
+                        'num_replicates': args.num_replicates,
+                        'hyperparameters': hyperparameters,
+                        'pretrain_data_filename': args.pretrain_data,
+                    }
+                    work_items.append(work_dict)
+        else:
+            logo_groups = set(df[args.logo_column])
+            for group in logo_groups:
+                for replicate in range(args.num_replicates):
+                    work_dict = {
+                        'work_item_name': str(uuid.uuid4()),
+                        'architecture_num': h,
+                        'num_architectures': len(hyperparameters_lst),
+                        'fold_num': group,
+                        'num_folds': len(logo_groups),
+                        'replicate_num': replicate,
+                        'num_replicates': args.num_replicates,
+                        'hyperparameters': hyperparameters,
+                        'pretrain_data_filename': args.pretrain_data,
+                    }
+                    work_items.append(work_dict)
 
     training_init_info = {}
     training_init_info["train_data"] = df
