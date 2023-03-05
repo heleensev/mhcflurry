@@ -7,13 +7,37 @@
 # cluster mode uses an HPC cluster (Mount Sinai chimera cluster, which uses lsf job
 # scheduler). This would need to be modified for other sites.
 #
+
+#SBATCH --nodelist=dlc-groudon
+
+source /home/dariomarzella/miniconda3/etc/profile.d/conda.sh
+conda activate mhcflurry
+
 set -e
 set -x
 
+# get name of the temporary directory working directory, physically on the compute-node
+workdir="${TMPDIR}"
+
+# get submit directory
+# (every file/folder below this directory is copied to the compute node)
+submitdir="${SLURM_SUBMIT_DIR}"
+
+# change current directory to the location of the sbatch command
+# ("submitdir" is somewhere in the home directory on the head node)
+cd "${submitdir}"
+# copy all files/folders in "submitdir" to "workdir"
+# ("workdir" == temporary directory on the compute node)
+cp -prf * ${workdir}
+# change directory to the temporary directory on the compute-node
+cd ${workdir}
+
 DOWNLOAD_NAME=models_class1_pan
 SCRATCH_DIR=${TMPDIR-/tmp}/mhcflurry-downloads-generation
-SCRIPT_ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-SCRIPT_DIR=$(dirname "$SCRIPT_ABSOLUTE_PATH")
+# SCRIPT_ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_ABSOLUTE_PATH="$workdir"
+# SCRIPT_DIR=$(dirname "$SCRIPT_ABSOLUTE_PATH")
+SCRIPT_DIR="$workdir"
 
 if [ "$1" != "cluster" ]
 then
@@ -52,29 +76,21 @@ exec 2> >(tee -ia "$LOG" >&2)
 # Log some environment info
 echo "Invocation: $0 $@"
 date
-pip freeze
-git status
 
 cd $SCRATCH_DIR/$DOWNLOAD_NAME
 
 export OMP_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
 
-cp $SCRIPT_DIR/additional_alleles.txt .
+# cp $SCRIPT_DIR/additional_alleles.txt .
 
 if [ "$2" != "continue-incomplete" ]
 then
     cp $SCRIPT_DIR/generate_hyperparameters.py .
     python generate_hyperparameters.py > hyperparameters.yaml
 fi
-
-cp $SCRIPT_DIR/reassign_mass_spec_training_data.py .
-python reassign_mass_spec_training_data.py \
-    "$(mhcflurry-downloads path data_curated)/curated_training_data.csv.bz2" \
-    --set-measurement-value 100 \
-    --out-csv "$(pwd)/train_data.csv"
-bzip2 -f "$(pwd)/train_data.csv"
-TRAINING_DATA="$(pwd)/train_data.csv.bz2"
+cp $SCRIPT_DIR/data/all_hla_pseudoseq.csv .
+TRAINING_DATA="$(pwd)/all_hla_pseudoseq.csv"
 
 for kind in combined
 do
@@ -94,7 +110,7 @@ do
         --held-out-measurements-per-allele-fraction-and-max 0.25 100 \
         --num-folds 4 \
         --hyperparameters "$HYPERPARAMETERS" \
-        --out-models-dir $(pwd)/models.unselected.${kind} \
+        --out-models-dir "$submitdir/output/models.unselected.${kind}" \
         --worker-log-dir "$SCRATCH_DIR/$DOWNLOAD_NAME" \
         $PARALLELISM_ARGS $CONTINUE_INCOMPLETE_ARGS
 done
@@ -103,7 +119,7 @@ echo "Done training. Beginning model selection."
 
 for kind in combined
 do
-    MODELS_DIR="models.unselected.${kind}"
+    MODELS_DIR="$submitdir/output/models.unselected.${kind}"
 
     # Older method calibrated only particular alleles. We are now calibrating
     # all alleles, so this is commented out.
@@ -159,4 +175,5 @@ mv models.unselected.* .ignored/
 RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.selected.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 mv .ignored/* . && rmdir .ignored
+mv "$RESULT" "/data/cmbi/dario/"
 echo "Created archive: $RESULT"
