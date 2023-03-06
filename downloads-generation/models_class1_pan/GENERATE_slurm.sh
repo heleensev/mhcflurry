@@ -58,7 +58,7 @@ else
     PARALLELISM_ARGS+=" --cluster-parallelism --cluster-max-retries 3 --cluster-submit-command sbatch --cluster-results-workdir $HOME/mhcflurry-scratch --cluster-script-prefix-path $SCRIPT_DIR/cluster_submit_script_header.mssm_hpc.slurm"
 fi
 
-mkdir -p "$SCRATCH_DIR"
+mkdir -p "$SCRATCH_DIR/$DOWNLOAD_NAME"
 if [ "$2" != "continue-incomplete" ]
 then
     echo "Fresh run"
@@ -95,7 +95,7 @@ TRAINING_DATA="$(pwd)/all_hla_pseudoseq.csv"
 for kind in combined
 do
     CONTINUE_INCOMPLETE_ARGS=""
-    if [ "$2" == "continue-incomplete" ] && [ -d "models.unselected.${kind}" ]
+    if [ "$2" == "continue-incomplete" ]
     then
         echo "Will continue existing run: $kind"
         CONTINUE_INCOMPLETE_ARGS="--continue-incomplete"
@@ -155,23 +155,10 @@ RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 echo "Created archive: $RESULT"
 
-# Split into <2GB chunks for GitHub
-PARTS="${RESULT}.part."
-# Check for pre-existing part files and rename them.
-for i in $(ls "${PARTS}"* )
-do
-    DEST="${i}.OLD.$(date +%s)"
-    echo "WARNING: already exists: $i . Moving to $DEST"
-    mv $i $DEST
-done
-split -b 2000M "$RESULT" "$PARTS"
-echo "Split into parts:"
-ls -lh "${PARTS}"*
-
 # Write out just the selected models
 # Move unselected into a hidden dir so it is excluded in the glob (*).
 mkdir .ignored
-mv models.unselected.* .ignored/
+mv "$submitdir/output/models.unselected.${kind}" .ignored/
 RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.selected.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 mv .ignored/* . && rmdir .ignored
