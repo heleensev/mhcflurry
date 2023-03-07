@@ -8,7 +8,7 @@
 # scheduler). This would need to be modified for other sites.
 #
 
-#SBATCH --nodelist=dlc-groudon
+#SBATCH --nodelist=dlc-articuno
 
 source /home/dariomarzella/miniconda3/etc/profile.d/conda.sh
 conda activate mhcflurry
@@ -32,7 +32,7 @@ cp -prf * ${workdir}
 # change directory to the temporary directory on the compute-node
 cd ${workdir}
 
-DOWNLOAD_NAME=models_class1_pan
+DOWNLOAD_NAME=models_class1_pan_shuffled
 SCRATCH_DIR=${TMPDIR-/tmp}/mhcflurry-downloads-generation
 # SCRIPT_ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_ABSOLUTE_PATH="$workdir"
@@ -110,7 +110,7 @@ do
         --held-out-measurements-per-allele-fraction-and-max 0.25 100 \
         --num-folds 4 \
         --hyperparameters "$HYPERPARAMETERS" \
-        --out-models-dir "$submitdir/output/models.unselected.${kind}" \
+        --out-models-dir "$submitdir/output_shuffled/models.unselected.${kind}" \
         --worker-log-dir "$SCRATCH_DIR/$DOWNLOAD_NAME" \
         $PARALLELISM_ARGS $CONTINUE_INCOMPLETE_ARGS
 done
@@ -119,7 +119,7 @@ echo "Done training. Beginning model selection."
 
 for kind in combined
 do
-    MODELS_DIR="$submitdir/output/models.unselected.${kind}"
+    MODELS_DIR="$submitdir/output_shuffled/models.unselected.${kind}"
 
     # Older method calibrated only particular alleles. We are now calibrating
     # all alleles, so this is commented out.
@@ -147,7 +147,7 @@ echo "Created archive: $RESULT"
 # Write out just the selected models
 # Move unselected into a hidden dir so it is excluded in the glob (*).
 mkdir .ignored
-mv "$submitdir/output/models.unselected.${kind}" .ignored/
+mv "$submitdir/output_shuffled/models.unselected.${kind}" .ignored/
 RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.selected.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 mv .ignored/* . && rmdir .ignored
