@@ -8,7 +8,8 @@
 # scheduler). This would need to be modified for other sites.
 #
 
-#SBATCH --nodelist=dlc-articuno
+#SBATCH --nodelist=dlc-groudon
+#SBATCH --ntasks=10
 
 source /home/dariomarzella/miniconda3/etc/profile.d/conda.sh
 conda activate mhcflurry
