@@ -8,7 +8,7 @@
 # scheduler). This would need to be modified for other sites.
 #
 
-#SBATCH --nodelist=dlc-jynx
+#SBATCH --nodelist=dlc-groudon
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
 
@@ -34,7 +34,7 @@ cp -prf * ${workdir}
 # change directory to the temporary directory on the compute-node
 cd ${workdir}
 
-DOWNLOAD_NAME=models_class1_pan_peptide_cluster
+DOWNLOAD_NAME=models_class1_pan_held_out
 SCRATCH_DIR=${TMPDIR-/tmp}/mhcflurry-downloads-generation
 # SCRIPT_ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_ABSOLUTE_PATH="$workdir"
@@ -91,8 +91,8 @@ then
     cp $SCRIPT_DIR/generate_hyperparameters.py .
     python generate_hyperparameters.py > hyperparameters.yaml
 fi
-cp /data/cmbi/dlepikhov/3DVac_experiments/experiments_data/BA_pMHCI_human_quantitative_only_eq_peptide_clustered_train_validation.csv .
-TRAINING_DATA="$(pwd)/BA_pMHCI_human_quantitative_only_eq_peptide_clustered_train_validation.csv"
+cp /data/cmbi/dlepikhov/3DVac_experiments/experiments_data/BA_pMHCI_human_quantitative_only_eq_held_out_alleles_train.csv .
+TRAINING_DATA="$(pwd)/BA_pMHCI_human_quantitative_only_eq_held_out_alleles_train.csv"
 
 for kind in combined
 do
@@ -112,7 +112,7 @@ do
         --held-out-measurements-per-allele-fraction-and-max 0.25 100 \
         --num-folds 4 \
         --hyperparameters "$HYPERPARAMETERS" \
-        --out-models-dir "/data/cmbi/dlepikhov/3DVac_experiments/peptide_clustered_exp/models.unselected.${kind}" \
+        --out-models-dir "/data/cmbi/dlepikhov/3DVac_experiments/held_out_exp/models.unselected.${kind}" \
         --worker-log-dir "$SCRATCH_DIR/$DOWNLOAD_NAME" \
         $PARALLELISM_ARGS $CONTINUE_INCOMPLETE_ARGS
 done
@@ -121,7 +121,7 @@ echo "Done training. Beginning model selection."
 
 for kind in combined
 do
-    MODELS_DIR="/data/cmbi/dlepikhov/3DVac_experiments/peptide_clustered_exp/models.unselected.${kind}"
+    MODELS_DIR="/data/cmbi/dlepikhov/3DVac_experiments/held_out_exp/models.unselected.${kind}"
 
     # Older method calibrated only particular alleles. We are now calibrating
     # all alleles, so this is commented out.
@@ -142,9 +142,9 @@ done
 # Write out just the selected models
 # Move unselected into a hidden dir so it is excluded in the glob (*).
 mkdir .ignored
-mv "/data/cmbi/dlepikhov/3DVac_experiments/peptide_clustered_exp/models.unselected.${kind}" .ignored/
+mv "/data/cmbi/dlepikhov/3DVac_experiments/held_out_exp/models.unselected.${kind}" .ignored/
 RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.selected.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 mv .ignored/* . && rmdir .ignored
-mv "$RESULT" "/data/cmbi/dlepikhov/3DVac_experiments/peptide_clustered_exp/"
+mv "$RESULT" "/data/cmbi/dlepikhov/3DVac_experiments/held_out_exp/"
 echo "Created archive: $RESULT"

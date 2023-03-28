@@ -8,7 +8,7 @@
 # scheduler). This would need to be modified for other sites.
 #
 
-#SBATCH --nodelist=dlc-jynx
+#SBATCH --nodelist=dlc-groudon
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
 
@@ -138,6 +138,13 @@ do
     cp "$MODELS_DIR/train_data.csv.bz2" "models.${kind}/train_data.csv.bz2"
 
 done
+
+cp $SCRIPT_ABSOLUTE_PATH .
+bzip2 -f "$LOG"
+for i in $(ls LOG-worker.*.txt) ; do bzip2 -f $i ; done
+RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.$(date +%Y%m%d).tar.bz2"
+tar -cjf "$RESULT" *
+echo "Created archive: $RESULT"
 
 # Write out just the selected models
 # Move unselected into a hidden dir so it is excluded in the glob (*).

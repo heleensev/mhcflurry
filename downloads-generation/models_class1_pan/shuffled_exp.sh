@@ -9,8 +9,10 @@
 #
 
 #SBATCH --nodelist=dlc-magmar
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=12
 
-source /home/dariomarzella/miniconda3/etc/profile.d/conda.sh
+source /home/daniillepikhov/miniconda3/etc/profile.d/conda.sh
 conda activate mhcflurry
 
 set -e
@@ -89,8 +91,8 @@ then
     cp $SCRIPT_DIR/generate_hyperparameters.py .
     python generate_hyperparameters.py > hyperparameters.yaml
 fi
-cp $SCRIPT_DIR/data/all_hla_pseudoseq.csv .
-TRAINING_DATA="$(pwd)/all_hla_pseudoseq.csv"
+cp /data/cmbi/dlepikhov/3DVac_experiments/experiments_data/BA_pMHCI_human_quantitative_only_eq_shuffled_train_validation.csv .
+TRAINING_DATA="$(pwd)/BA_pMHCI_human_quantitative_only_eq_shuffled_train_validation.csv"
 
 for kind in combined
 do
@@ -110,7 +112,7 @@ do
         --held-out-measurements-per-allele-fraction-and-max 0.25 100 \
         --num-folds 4 \
         --hyperparameters "$HYPERPARAMETERS" \
-        --out-models-dir "$submitdir/output_shuffled/models.unselected.${kind}" \
+        --out-models-dir "/data/cmbi/dlepikhov/3DVac_experiments/shuffled_exp/models.unselected.${kind}" \
         --worker-log-dir "$SCRATCH_DIR/$DOWNLOAD_NAME" \
         $PARALLELISM_ARGS $CONTINUE_INCOMPLETE_ARGS
 done
@@ -119,7 +121,7 @@ echo "Done training. Beginning model selection."
 
 for kind in combined
 do
-    MODELS_DIR="$submitdir/output_shuffled/models.unselected.${kind}"
+    MODELS_DIR="/data/cmbi/dlepikhov/3DVac_experiments/shuffled_exp/models.unselected.${kind}"
 
     # Older method calibrated only particular alleles. We are now calibrating
     # all alleles, so this is commented out.
@@ -137,19 +139,12 @@ do
 
 done
 
-cp $SCRIPT_ABSOLUTE_PATH .
-bzip2 -f "$LOG"
-for i in $(ls LOG-worker.*.txt) ; do bzip2 -f $i ; done
-RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.$(date +%Y%m%d).tar.bz2"
-tar -cjf "$RESULT" *
-echo "Created archive: $RESULT"
-
 # Write out just the selected models
 # Move unselected into a hidden dir so it is excluded in the glob (*).
 mkdir .ignored
-mv "$submitdir/output_shuffled/models.unselected.${kind}" .ignored/
+mv "/data/cmbi/dlepikhov/3DVac_experiments/shuffled_exp/models.unselected.${kind}" .ignored/
 RESULT="$SCRATCH_DIR/${DOWNLOAD_NAME}.selected.$(date +%Y%m%d).tar.bz2"
 tar -cjf "$RESULT" *
 mv .ignored/* . && rmdir .ignored
-mv "$RESULT" "/data/cmbi/dario/"
+mv "$RESULT" "/data/cmbi/dlepikhov/3DVac_experiments/shuffled_exp/"
 echo "Created archive: $RESULT"

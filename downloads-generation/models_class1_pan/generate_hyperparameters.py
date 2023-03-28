@@ -20,7 +20,7 @@ base_hyperparameters = {
     'locally_connected_layers': [],
     'topology': 'feedfoward',
     'loss': 'custom:mse_with_inequalities',
-    'max_epochs': 5,
+    'max_epochs': 5000,
     'minibatch_size': 128,
     'optimizer': 'rmsprop',
     'output_activation': 'sigmoid',
